@@ -11,7 +11,7 @@ func main() {
 
 	// 允許 CORS (簡單版，正式環境建議使用專用 Middleware)
 	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
@@ -49,7 +49,20 @@ func registerHandler(c *gin.Context) {
 }
 
 func loginHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "msg": "Login API Placeholder"})
+	var json struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&json); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// TODO: Replace with real user authentication
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+		"msg":    "Login successful for " + json.Email,
+		"token":  "mock_jwt_token",
+	})
 }
 
 func getRecordsHandler(c *gin.Context) {
