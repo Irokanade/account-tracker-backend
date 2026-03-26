@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -121,13 +122,13 @@ func pushSyncHandler(c *gin.Context) {
 	// 2. Insert new state
 	// Insert Categories
 	for _, cat := range data.Categories {
-		_, err = tx.Exec(ctx, 
+		_, err = tx.Exec(ctx,
 			"INSERT INTO categories (id, user_id, name, type, icon, color, is_default) VALUES ($1, $2, $3, $4, $5, $6, $7)",
 			cat.ID, userID, cat.Name, cat.Type, cat.Icon, cat.Color, cat.IsDefault)
-		if err != nil { 
+		if err != nil {
 			log.Printf("[Sync] Category insert error: %v\n", err)
 			insertError(c, "categories", err)
-			return 
+			return
 		}
 	}
 
@@ -135,58 +136,60 @@ func pushSyncHandler(c *gin.Context) {
 	for _, book := range data.Books {
 		_, err = tx.Exec(ctx, "INSERT INTO books (id, user_id, name, created_at) VALUES ($1, $2, $3, $4)",
 			book.ID, userID, book.Name, book.CreatedAt)
-		if err != nil { 
+		if err != nil {
 			log.Printf("[Sync] Book insert error: %v\n", err)
 			insertError(c, "books", err)
-			return 
+			return
 		}
 
 		for _, m := range book.Members {
 			_, err = tx.Exec(ctx, "INSERT INTO book_members (id, book_id, name) VALUES ($1, $2, $3)",
 				m.ID, book.ID, m.Name)
-			if err != nil { 
+			if err != nil {
 				log.Printf("[Sync] Member insert error: %v\n", err)
 				insertError(c, "book_members", err)
-				return 
+				return
 			}
 		}
 	}
 
 	// Insert Shared Records
 	for _, rec := range data.Records {
-		_, err = tx.Exec(ctx, 
+		_, err = tx.Exec(ctx,
 			"INSERT INTO records (id, book_id, type, amount, category, date, note, paid_by_id, split_among_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
 			rec.ID, rec.BookID, rec.Type, rec.Amount, rec.Category, rec.Date, rec.Note, rec.PaidByID, rec.SplitAmongIds)
-		if err != nil { 
+		if err != nil {
 			log.Printf("[Sync] Record insert error: %v\n", err)
 			insertError(c, "records", err)
-			return 
+			return
 		}
 	}
 
 	// Insert Personal Records
 	for _, rec := range data.PersonalRecords {
 		var sourceBookID *string
-		if rec.SourceBookID != "" { sourceBookID = &rec.SourceBookID }
-		_, err = tx.Exec(ctx, 
+		if rec.SourceBookID != "" {
+			sourceBookID = &rec.SourceBookID
+		}
+		_, err = tx.Exec(ctx,
 			"INSERT INTO personal_records (id, user_id, type, amount, category, date, note, source_book_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
 			rec.ID, userID, rec.Type, rec.Amount, rec.Category, rec.Date, rec.Note, sourceBookID)
-		if err != nil { 
+		if err != nil {
 			log.Printf("[Sync] Personal record insert error: %v\n", err)
 			insertError(c, "personal_records", err)
-			return 
+			return
 		}
 	}
 
 	// Insert Templates
 	for _, tpl := range data.Templates {
-		_, err = tx.Exec(ctx, 
+		_, err = tx.Exec(ctx,
 			"INSERT INTO record_templates (id, user_id, name, type, amount, category, note) VALUES ($1, $2, $3, $4, $5, $6, $7)",
 			tpl.ID, userID, tpl.Name, tpl.Type, tpl.Amount, tpl.Category, tpl.Note)
-		if err != nil { 
+		if err != nil {
 			log.Printf("[Sync] Template insert error: %v\n", err)
 			insertError(c, "templates", err)
-			return 
+			return
 		}
 	}
 
