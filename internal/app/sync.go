@@ -2,12 +2,61 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// normalizeTimestamp attempts to convert non-standard timestamp strings 
+// (like Go's default time.String() format) into RFC3339 which PostgreSQL prefers.
+func normalizeTimestamp(ts string) string {
+	if ts == "" {
+		return ts
+	}
+	// If it already parses as RFC3339, it's good.
+	if _, err := time.Parse(time.RFC3339, ts); err == nil {
+		return ts
+	}
+
+	// Go's default .String() format is "2006-01-02 15:04:05.999999999 -0700 MST"
+	// The trailing " MST" (zone name) can cause parsing issues if ambiguous.
+	// We'll normalize by taking only the first three parts (Date, Time, Offset).
+	parts := strings.Fields(ts)
+	if len(parts) < 3 {
+		return ts
+	}
+	
+	cleanTS := strings.Join(parts[:3], " ")
+	layouts := []string{
+		"2006-01-02 15:04:05.999999999 -0700",
+		"2006-01-02 15:04:05.999 -0700",
+		"2006-01-02 15:04:05.99 -0700",
+		"2006-01-02 15:04:05.9 -0700",
+		"2006-01-02 15:04:05 -0700",
+	}
+
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, cleanTS); err == nil {
+			return t.Format(time.RFC3339)
+		}
+	}
+	return ts
+}
+
+// normalizeDate specifically returns YYYY-MM-DD for DATE columns.
+func normalizeDate(d string) string {
+	if d == "" || (len(d) == 10 && d[4] == '-' && d[7] == '-') {
+		return d
+	}
+	ts := normalizeTimestamp(d)
+	if len(ts) >= 10 && ts[4] == '-' && ts[7] == '-' {
+		return ts[:10]
+	}
+	return d
+}
 
 type SyncMember struct {
 	ID   string `json:"id"`
@@ -134,8 +183,9 @@ func pushSyncHandler(c *gin.Context) {
 
 	// Insert Books & Members
 	for _, book := range data.Books {
+		createdAt := normalizeTimestamp(book.CreatedAt)
 		_, err = tx.Exec(ctx, "INSERT INTO books (id, user_id, name, created_at) VALUES ($1, $2, $3, $4)",
-			book.ID, userID, book.Name, book.CreatedAt)
+			book.ID, userID, book.Name, createdAt)
 		if err != nil {
 			log.Printf("[Sync] Book insert error: %v\n", err)
 			insertError(c, "books", err)
@@ -155,9 +205,10 @@ func pushSyncHandler(c *gin.Context) {
 
 	// Insert Shared Records
 	for _, rec := range data.Records {
+		date := normalizeDate(rec.Date)
 		_, err = tx.Exec(ctx,
 			"INSERT INTO records (id, book_id, type, amount, category, date, note, paid_by_id, split_among_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-			rec.ID, rec.BookID, rec.Type, rec.Amount, rec.Category, rec.Date, rec.Note, rec.PaidByID, rec.SplitAmongIds)
+			rec.ID, rec.BookID, rec.Type, rec.Amount, rec.Category, date, rec.Note, rec.PaidByID, rec.SplitAmongIds)
 		if err != nil {
 			log.Printf("[Sync] Record insert error: %v\n", err)
 			insertError(c, "records", err)
@@ -171,9 +222,10 @@ func pushSyncHandler(c *gin.Context) {
 		if rec.SourceBookID != "" {
 			sourceBookID = &rec.SourceBookID
 		}
+		date := normalizeDate(rec.Date)
 		_, err = tx.Exec(ctx,
 			"INSERT INTO personal_records (id, user_id, type, amount, category, date, note, source_book_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-			rec.ID, userID, rec.Type, rec.Amount, rec.Category, rec.Date, rec.Note, sourceBookID)
+			rec.ID, userID, rec.Type, rec.Amount, rec.Category, date, rec.Note, sourceBookID)
 		if err != nil {
 			log.Printf("[Sync] Personal record insert error: %v\n", err)
 			insertError(c, "personal_records", err)
@@ -245,10 +297,9 @@ func pullSyncHandler(c *gin.Context) {
 	rows, _ = dbPool.Query(ctx, "SELECT id, name, created_at FROM books WHERE user_id = $1", userID)
 	for rows.Next() {
 		var item SyncBook
-		var createdAt interface{}
+		var createdAt time.Time
 		_ = rows.Scan(&item.ID, &item.Name, &createdAt)
-		// Convert to string for JSON
-		item.CreatedAt = fmt.Sprintf("%v", createdAt)
+		item.CreatedAt = createdAt.Format(time.RFC3339)
 
 		// Fetch Members for each book
 		mRows, _ := dbPool.Query(ctx, "SELECT id, name FROM book_members WHERE book_id = $1", item.ID)
@@ -269,9 +320,9 @@ func pullSyncHandler(c *gin.Context) {
 		WHERE b.user_id = $1`, userID)
 	for rows.Next() {
 		var item SyncRecord
-		var date interface{}
+		var date time.Time
 		_ = rows.Scan(&item.ID, &item.BookID, &item.Type, &item.Amount, &item.Category, &date, &item.Note, &item.PaidByID, &item.SplitAmongIds)
-		item.Date = fmt.Sprintf("%v", date)
+		item.Date = date.Format("2006-01-02")
 		data.Records = append(data.Records, item)
 	}
 
@@ -279,9 +330,9 @@ func pullSyncHandler(c *gin.Context) {
 	rows, _ = dbPool.Query(ctx, "SELECT id, type, amount, category, date, note, COALESCE(source_book_id::text, '') FROM personal_records WHERE user_id = $1", userID)
 	for rows.Next() {
 		var item SyncPersonalRecord
-		var date interface{}
+		var date time.Time
 		_ = rows.Scan(&item.ID, &item.Type, &item.Amount, &item.Category, &date, &item.Note, &item.SourceBookID)
-		item.Date = fmt.Sprintf("%v", date)
+		item.Date = date.Format("2006-01-02")
 		data.PersonalRecords = append(data.PersonalRecords, item)
 	}
 
