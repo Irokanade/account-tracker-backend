@@ -123,15 +123,16 @@ func googleCallbackHandler(c *gin.Context) {
 	// ---- Upsert user into database ----
 	if dbPool != nil {
 		query := `
-			INSERT INTO users (google_id, email, name, avatar, last_login)
-			VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+			INSERT INTO users (google_id, email, name, avatar_url)
+			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (google_id) DO UPDATE 
-			SET name = $3, avatar = $4, last_login = CURRENT_TIMESTAMP
+			SET name = EXCLUDED.name, 
+			    avatar_url = EXCLUDED.avatar_url, 
+			    email = EXCLUDED.email
 		`
 		_, err := dbPool.Exec(context.Background(), query, userInfo.Id, userInfo.Email, userInfo.Name, userInfo.Picture)
 		if err != nil {
 			log.Printf("Failed to upsert user: %v\n", err)
-			// We continue even if DB fails for now, or you can choose to return error
 		}
 	}
 
