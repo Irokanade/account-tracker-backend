@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/feilian1999/account-tracker-backend/internal/auth"
+	"github.com/feilian1999/account-tracker-backend/internal/db"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
@@ -44,6 +46,18 @@ func initDB() {
 		log.Printf("Database ping failed: %v\n", err)
 	} else {
 		log.Println("Successfully connected to Neon Database!")
+
+		// Run Migrations
+		migrateURL := dbURL
+		if strings.HasPrefix(migrateURL, "postgres://") {
+			migrateURL = strings.Replace(migrateURL, "postgres://", "pgx5://", 1)
+		} else if strings.HasPrefix(migrateURL, "postgresql://") {
+			migrateURL = strings.Replace(migrateURL, "postgresql://", "pgx5://", 1)
+		}
+
+		if err := db.RunMigrations(migrateURL); err != nil {
+			log.Printf("Migration failed: %v\n", err)
+		}
 	}
 }
 
