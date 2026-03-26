@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/oauth2/v2"
+	googleoauth2 "google.golang.org/api/oauth2/v2"
 	"google.golang.org/api/option"
 )
 
@@ -30,13 +30,13 @@ func GetGoogleLoginURL(state string) string {
 	return googleOauthConfig.AuthCodeURL(state)
 }
 
-func GetGoogleUserInfo(code string) (*oauth2.Token, *oauth2.Userinfo, error) {
+func GetGoogleUserInfo(code string) (*oauth2.Token, *googleoauth2.Userinfo, error) {
 	token, err := googleOauthConfig.Exchange(context.Background(), code)
 	if err != nil {
 		return nil, nil, fmt.Errorf("code exchange failed: %s", err.Error())
 	}
 
-	oauth2Service, err := oauth2.NewService(context.Background(), option.WithTokenSource(googleOauthConfig.TokenSource(context.Background(), token)))
+	oauth2Service, err := googleoauth2.NewService(context.Background(), option.WithTokenSource(googleOauthConfig.TokenSource(context.Background(), token)))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create oauth2 service: %s", err.Error())
 	}
