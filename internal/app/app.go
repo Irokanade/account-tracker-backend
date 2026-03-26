@@ -12,6 +12,7 @@ import (
 
 	"github.com/feilian1999/account-tracker-backend/internal/auth"
 	"github.com/feilian1999/account-tracker-backend/internal/db"
+	"github.com/feilian1999/account-tracker-backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
@@ -96,6 +97,14 @@ func setupRouter() {
 		api.POST("/auth/login", loginHandler)
 		api.GET("/records", getRecordsHandler)
 		api.POST("/records/sync", syncRecordsHandler)
+
+		// Sync endpoints protected by JWT
+		syncGrp := api.Group("/sync")
+		syncGrp.Use(middleware.AuthMiddleware())
+		{
+			syncGrp.POST("/push", pushSyncHandler)
+			syncGrp.GET("/pull", pullSyncHandler)
+		}
 	}
 
 	router = r
