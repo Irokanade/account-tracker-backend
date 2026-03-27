@@ -105,6 +105,14 @@ func setupRouter() {
 			syncGrp.POST("/push", pushSyncHandler)
 			syncGrp.GET("/pull", pullSyncHandler)
 		}
+
+		// Public Shared Spaces (Option 2)
+		sharedGrp := api.Group("/shared")
+		{
+			sharedGrp.POST("/share", shareBookHandler)           // Create a new share code
+			sharedGrp.GET("/:code", getSharedBookHandler)        // Fetch book by code
+			sharedGrp.PUT("/:code", updateSharedBookHandler)     // Update book by code
+		}
 	}
 
 	router = r
