@@ -380,7 +380,7 @@ func pushSyncByUUIDHandler(c *gin.Context) {
 	err := dbPool.QueryRow(ctx, "SELECT id FROM users WHERE id = $1", wrapper.UUID).Scan(&userID)
 	if err != nil {
 		// Create anonymous user
-		_, err = dbPool.Exec(ctx, "INSERT INTO users (id, name) VALUES ($1, $2)", wrapper.UUID, "Anonymous")
+		_, err = dbPool.Exec(ctx, "INSERT INTO users (id, name, email) VALUES ($1, $2, $3)", wrapper.UUID, "Anonymous", wrapper.UUID+"@anonymous.local")
 		if err != nil {
 			log.Printf("[Sync] Failed to create anonymous user: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user entry"})
