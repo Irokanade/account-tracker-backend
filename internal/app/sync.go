@@ -405,7 +405,14 @@ func pushSyncByUUIDHandler(c *gin.Context) {
 	}
 	defer tx.Rollback(ctx)
 
-	// Clear existing data
+	// Clear existing data — delete child tables first to avoid FK cascade issues
+	// records & book_members depend on books, so delete them before books
+	if _, err := tx.Exec(ctx, "DELETE FROM records WHERE book_id IN (SELECT id FROM books WHERE user_id = $1)", userID); err != nil {
+		log.Printf("[Sync] Failed to clear records: %v\n", err)
+	}
+	if _, err := tx.Exec(ctx, "DELETE FROM book_members WHERE book_id IN (SELECT id FROM books WHERE user_id = $1)", userID); err != nil {
+		log.Printf("[Sync] Failed to clear book_members: %v\n", err)
+	}
 	if _, err := tx.Exec(ctx, "DELETE FROM books WHERE user_id = $1", userID); err != nil {
 		log.Printf("[Sync] Failed to clear books: %v\n", err)
 	}
