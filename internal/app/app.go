@@ -98,12 +98,20 @@ func setupRouter() {
 		api.GET("/records", getRecordsHandler)
 		api.POST("/records/sync", syncRecordsHandler)
 
-		// Sync endpoints protected by JWT
+		// Sync endpoints
 		syncGrp := api.Group("/sync")
-		syncGrp.Use(middleware.AuthMiddleware())
 		{
-			syncGrp.POST("/push", pushSyncHandler)
-			syncGrp.GET("/pull", pullSyncHandler)
+			// Public UUID-based sync
+			syncGrp.POST("/push-uuid", pushSyncByUUIDHandler)
+			syncGrp.GET("/pull-uuid/:uuid", pullSyncByUUIDHandler)
+
+			// Protected by JWT
+			syncAuthGrp := syncGrp.Group("/")
+			syncAuthGrp.Use(middleware.AuthMiddleware())
+			{
+				syncAuthGrp.POST("/push", pushSyncHandler)
+				syncAuthGrp.GET("/pull", pullSyncHandler)
+			}
 		}
 
 		// Public Shared Spaces (Option 2)
