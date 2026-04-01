@@ -424,16 +424,26 @@ func pushSyncByUUIDHandler(c *gin.Context) {
 	// Books & Members
 	for _, book := range wrapper.Books {
 		createdAt := normalizeTimestamp(book.CreatedAt)
-		_, err = tx.Exec(ctx, "INSERT INTO books (id, user_id, name, created_at) VALUES ($1, $2, $3, $4)",
-			book.ID, userID, book.Name, createdAt)
+		_, err = tx.Exec(ctx, `
+			INSERT INTO books (id, user_id, name, created_at) 
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (id) DO UPDATE SET 
+				name = EXCLUDED.name,
+				created_at = EXCLUDED.created_at
+		`, book.ID, userID, book.Name, createdAt)
 		if err != nil {
 			insertError(c, "books", err)
 			return
 		}
 
 		for _, m := range book.Members {
-			_, err = tx.Exec(ctx, "INSERT INTO book_members (id, book_id, name) VALUES ($1, $2, $3)",
-				m.ID, book.ID, m.Name)
+			_, err = tx.Exec(ctx, `
+				INSERT INTO book_members (id, book_id, name) 
+				VALUES ($1, $2, $3)
+				ON CONFLICT (id) DO UPDATE SET
+					name = EXCLUDED.name,
+					book_id = EXCLUDED.book_id
+			`, m.ID, book.ID, m.Name)
 			if err != nil {
 				insertError(c, "book_members", err)
 				return
@@ -444,9 +454,18 @@ func pushSyncByUUIDHandler(c *gin.Context) {
 	// Shared Records
 	for _, rec := range wrapper.Records {
 		date := normalizeDate(rec.Date)
-		_, err = tx.Exec(ctx,
-			"INSERT INTO records (id, book_id, type, amount, category, date, note, paid_by_id, split_among_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-			rec.ID, rec.BookID, rec.Type, rec.Amount, rec.Category, date, rec.Note, rec.PaidByID, rec.SplitAmongIds)
+		_, err = tx.Exec(ctx, `
+			INSERT INTO records (id, book_id, type, amount, category, date, note, paid_by_id, split_among_ids) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (id) DO UPDATE SET
+				type = EXCLUDED.type,
+				amount = EXCLUDED.amount,
+				category = EXCLUDED.category,
+				date = EXCLUDED.date,
+				note = EXCLUDED.note,
+				paid_by_id = EXCLUDED.paid_by_id,
+				split_among_ids = EXCLUDED.split_among_ids
+		`, rec.ID, rec.BookID, rec.Type, rec.Amount, rec.Category, date, rec.Note, rec.PaidByID, rec.SplitAmongIds)
 		if err != nil {
 			insertError(c, "records", err)
 			return
