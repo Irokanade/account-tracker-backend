@@ -423,19 +423,16 @@ func pushSyncByUUIDHandler(c *gin.Context) {
 
 	// Ensure user exists or create anonymous
 	var userID string
-	var googleID *string
-	err := dbPool.QueryRow(ctx, "SELECT id, google_id FROM users WHERE id = $1", wrapper.UUID).Scan(&userID, &googleID)
+	err := dbPool.QueryRow(ctx, "SELECT id FROM users WHERE id = $1", wrapper.UUID).Scan(&userID)
 	
 	if err == nil {
-		// User exists. If they have a Google ID, they must use authenticated sync.
-		if googleID != nil {
-			c.JSON(http.StatusForbidden, gin.H{"error": "This account is linked to Google. Please login to sync."})
-			return
-		}
-		// Existing anonymous user
+		// User exists — allow backup regardless of account type
 	} else {
-		// Create anonymous user
-		_, err = dbPool.Exec(ctx, "INSERT INTO users (id, name, email) VALUES ($1, $2, $3)", wrapper.UUID, "Anonymous", wrapper.UUID+"@anonymous.local")
+		// Create anonymous user (ON CONFLICT to handle race conditions / retries)
+		_, err = dbPool.Exec(ctx, `
+			INSERT INTO users (id, name, email) VALUES ($1, $2, $3)
+			ON CONFLICT (id) DO NOTHING
+		`, wrapper.UUID, "Anonymous", wrapper.UUID+"@anonymous.local")
 		if err != nil {
 			log.Printf("[Sync] Failed to create anonymous user: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user entry"})
