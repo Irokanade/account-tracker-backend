@@ -10,3 +10,8 @@ vendor/
 # Environment variables
 .env
 .cursor/mcp.json
+
+# Local binaries and logs
+server
+tmp_server
+*.log

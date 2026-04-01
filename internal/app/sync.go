@@ -59,8 +59,9 @@ func normalizeDate(d string) string {
 }
 
 type SyncMember struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	UserID string `json:"userId"`
 }
 
 type SyncBook struct {
@@ -210,13 +211,24 @@ func pushSyncHandler(c *gin.Context) {
 		}
 
 		for _, m := range book.Members {
+			var mUserID *string
+			if m.UserID != "" {
+				mUserID = &m.UserID
+				_, _ = tx.Exec(ctx, `
+					INSERT INTO users (id, name, email) 
+					VALUES ($1, $2, $3) 
+					ON CONFLICT (id) DO NOTHING
+				`, m.UserID, m.Name, m.UserID+"@anonymous.local")
+			}
+
 			_, err = tx.Exec(ctx, `
-				INSERT INTO book_members (id, book_id, name) 
-				VALUES ($1, $2, $3)
+				INSERT INTO book_members (id, book_id, name, user_id) 
+				VALUES ($1, $2, $3, $4)
 				ON CONFLICT (id) DO UPDATE SET
 					name = EXCLUDED.name,
-					book_id = EXCLUDED.book_id
-			`, m.ID, book.ID, m.Name)
+					book_id = EXCLUDED.book_id,
+					user_id = EXCLUDED.user_id
+			`, m.ID, book.ID, m.Name, mUserID)
 			if err != nil {
 				log.Printf("[Sync] Member insert error: %v\n", err)
 				insertError(c, "book_members", err)
@@ -352,11 +364,11 @@ func pullSyncHandler(c *gin.Context) {
 		item.CreatedAt = createdAt.Format(time.RFC3339)
 
 		// Fetch Members for each book
-		mRows, _ := dbPool.Query(ctx, "SELECT id, name FROM book_members WHERE book_id = $1", item.ID)
+		mRows, _ := dbPool.Query(ctx, "SELECT id, name, COALESCE(user_id::text, '') FROM book_members WHERE book_id = $1", item.ID)
 		item.Members = []SyncMember{}
 		for mRows.Next() {
 			var m SyncMember
-			_ = mRows.Scan(&m.ID, &m.Name)
+			_ = mRows.Scan(&m.ID, &m.Name, &m.UserID)
 			item.Members = append(item.Members, m)
 		}
 		data.Books = append(data.Books, item)
@@ -508,13 +520,24 @@ func pushSyncByUUIDHandler(c *gin.Context) {
 		}
 
 		for _, m := range book.Members {
+			var mUserID *string
+			if m.UserID != "" {
+				mUserID = &m.UserID
+				_, _ = tx.Exec(ctx, `
+					INSERT INTO users (id, name, email) 
+					VALUES ($1, $2, $3) 
+					ON CONFLICT (id) DO NOTHING
+				`, m.UserID, m.Name, m.UserID+"@anonymous.local")
+			}
+
 			_, err = tx.Exec(ctx, `
-				INSERT INTO book_members (id, book_id, name) 
-				VALUES ($1, $2, $3)
+				INSERT INTO book_members (id, book_id, name, user_id) 
+				VALUES ($1, $2, $3, $4)
 				ON CONFLICT (id) DO UPDATE SET
 					name = EXCLUDED.name,
-					book_id = EXCLUDED.book_id
-			`, m.ID, book.ID, m.Name)
+					book_id = EXCLUDED.book_id,
+					user_id = EXCLUDED.user_id
+			`, m.ID, book.ID, m.Name, mUserID)
 			if err != nil {
 				insertError(c, "book_members", err)
 				return
@@ -648,12 +671,12 @@ func pullSyncByUUIDHandler(c *gin.Context) {
 			item.CreatedAt = createdAt.Format(time.RFC3339)
 
 			// Fetch Members for each book
-			mRows, _ := dbPool.Query(ctx, "SELECT id, name FROM book_members WHERE book_id = $1", item.ID)
+			mRows, _ := dbPool.Query(ctx, "SELECT id, name, COALESCE(user_id::text, '') FROM book_members WHERE book_id = $1", item.ID)
 			item.Members = []SyncMember{}
 			if mRows != nil {
 				for mRows.Next() {
 					var m SyncMember
-					_ = mRows.Scan(&m.ID, &m.Name)
+					_ = mRows.Scan(&m.ID, &m.Name, &m.UserID)
 					item.Members = append(item.Members, m)
 				}
 				mRows.Close()
